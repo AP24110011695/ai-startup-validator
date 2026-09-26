@@ -7,6 +7,7 @@ hot-swaps the Gemini key with no restart. Runs are kept in memory (no DB for v1)
 """
 import json
 import logging
+import os
 import threading
 import time
 from uuid import uuid4
@@ -48,7 +49,13 @@ class KeyRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "mock_mode": USE_MOCK}
+    # version = Render's deployed commit hash (RENDER_GIT_COMMIT), so the live
+    # site's /health always answers "which code is deployed?".
+    return {
+        "status": "ok",
+        "mock_mode": USE_MOCK,
+        "version": os.getenv("RENDER_GIT_COMMIT", "local"),
+    }
 
 
 @app.post("/api/validate")

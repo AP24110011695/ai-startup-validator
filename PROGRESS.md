@@ -106,3 +106,15 @@
 **Assumptions:** default OFF (mock) is deliberately the safe path per the user's request, even on a real-mode server; `use_live` is optional (`bool | None`) so curl/older clients without the field keep the old server-default behavior.
 
 **Known issues:** none.
+
+## Bugfix — quota simulation fired on mock runs (2026-09-27, user report)
+
+**Report:** with the toggle OFF, submitting an idea still showed the "API key limit reached" quota screen.
+
+**Root cause found (reproducible locally):** `call_llm` checked the `FAKE_QUOTA_ERROR` simulation switch **before** the mock/live branch, so on any server with that switch set (the local demo server on port 8001 had it; it's a documented env var), even toggle-OFF mock runs raised `QuotaError` → quota screen. The toggle polarity, resolver, and frontend were verified correct (`app.js` sends `use_live: false` explicitly when unticked; `main.py` maps `not use_live`; `use_mock()` override wins). Separately confirmed: the Render URL `ai-startup-validator.onrender.com` is still serving the old two-route scaffold (its `/health` is 404, OpenAPI shows generic "FastAPI" with 2 routes) — the reported quota screen could not have come from this codebase on that URL.
+
+**Fixes:** (1) `FAKE_QUOTA_ERROR` moved inside the live branch — mock runs are always instant and quota-free; (2) `/health` now reports `version` (Render's `RENDER_GIT_COMMIT`) so the deployed commit is verifiable from the live site; (3) `app.js` reads the checkbox fail-safe (`?? false` — a stale cached page pair can never default to live) and logs the outgoing body via `console.debug`.
+
+**Tests:** new regression `test_quota_simulation_only_affects_live_runs` (FAKE on + unticked → mock report; FAKE on + ticked → structured `quota_exceeded`); strengthened `test_api_toggle_off_forces_mock_on_real_default_server` (tripwire in `_real_completion` proves zero real API calls; asserts clean report, no error events); updated the `test_api.py` quota test to target a live run. 43/43 pass. **Browser-verified locally** on a deployed-style server (`USE_MOCK=false FAKE_QUOTA_ERROR=1`): unticked → instant mock report, no quota card; ticked → quota card.
+
+**Known issues:** the Render service still points at the old scaffold repo — reconnecting it to `AP24110011695/ai-startup-validator@main` is a dashboard action on the user's side; after redeploy, `/health.version` should show the deployed commit hash.

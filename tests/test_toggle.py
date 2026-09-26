@@ -77,16 +77,41 @@ def test_call_llm_obeys_per_request_override(monkeypatch):
 
 
 def test_api_toggle_off_forces_mock_on_real_default_server(monkeypatch):
-    """Core requirement: use_live=false runs mock even when the server defaults
-    to real mode (USE_MOCK=False), with no API calls."""
-    monkeypatch.setattr(config, "USE_MOCK", False)
-    monkeypatch.setattr(llm, "_real_completion", lambda a, s, u, schema: (_ for _ in ()).throw(AssertionError("real path must not be used")))
+    """REGRESSION (reported bug): checkbox unticked in the actual request flow
+    (use_live=false sent by the UI) must run mock on a real-mode server with
+    ZERO real API calls. The faked _real_completion below is a tripwire: if the
+    live branch is ever taken, it raises and this test fails."""
+    monkeypatch.setattr(config, "USE_MOCK", False)  # deployed-style real default
+
+    def tripwire(agent, system, user, schema):
+        raise AssertionError(f"real API would have been called for {agent}")
+
+    monkeypatch.setattr(llm, "_real_completion", tripwire)
     events = _start_and_collect({"idea": IDEA, "use_live": False})
-    report = events[-1][1]
-    assert events[-1][0] == "report"
+    kind, report = events[-1]
+    assert kind == "report"  # completed, not an error
     assert report["mock_mode"] is True
     assert any("MOCK MODE" in w for w in report["warnings"])
-    assert report["evaluation"]["score"] == 62  # canned mock data
+    assert report["evaluation"]["score"] == 62  # canned mock data, not degraded
+    assert not [e for t, e in events if t == "run_error"]
+    assert not [e for t, e in events if t == "agent_status" and e["status"] == "failed"]
+
+
+def test_quota_simulation_only_affects_live_runs(monkeypatch):
+    """REGRESSION (reported bug): with FAKE_QUOTA_ERROR=1 set (the documented
+    simulation switch), a checkbox-UNTICKED run must still be an instant mock
+    report — the simulation applies to live runs only."""
+    monkeypatch.setattr(config, "FAKE_QUOTA_ERROR", True)
+    events = _start_and_collect({"idea": IDEA, "use_live": False})  # checkbox unticked
+    kind, report = events[-1]
+    assert kind == "report", f"mock run hit the quota screen: {events[-1]}"
+    assert report["mock_mode"] is True
+    assert report["evaluation"]["score"] == 62
+
+    # ...while a LIVE run on the same server aborts with the structured quota event
+    events = _start_and_collect({"idea": IDEA, "use_live": True})
+    assert events[-1][0] == "run_error"
+    assert events[-1][1]["code"] == "quota_exceeded"
 
 
 def test_api_toggle_on_uses_live_pipeline(monkeypatch):

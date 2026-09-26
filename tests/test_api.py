@@ -78,12 +78,15 @@ def test_invalid_idea_streams_error():
 
 
 def test_quota_simulation_streams_quota_exceeded(monkeypatch):
+    # The simulation models the real provider: it aborts LIVE runs (use_live=true)
+    # and leaves mock runs untouched (regression covered in test_toggle.py).
     monkeypatch.setattr(config, "FAKE_QUOTA_ERROR", True)
-    run_id = _start(IDEA)
-    events = _collect(run_id)
+    resp = client.post("/api/validate", json={"idea": IDEA, "use_live": True})
+    assert resp.status_code == 200
+    events = _collect(resp.json()["run_id"])
     assert events[-1][0] == "run_error"
     assert events[-1][1]["code"] == "quota_exceeded"
-    assert client.get(f"/api/runs/{run_id}").json()["status"] == "error"
+    assert client.get(f"/api/runs/{resp.json()['run_id']}").json()["status"] == "error"
 
 
 def test_set_key_swaps_in_memory_without_restart(monkeypatch):

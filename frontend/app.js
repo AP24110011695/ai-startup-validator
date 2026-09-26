@@ -35,11 +35,16 @@ async function startRun() {
   resetProgress();
   let resp;
   try {
-    resp = await fetch("/api/validate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idea: currentIdea, use_live: $("use-live").checked }),
-    });
+  // Fail-safe: a missing checkbox (stale cached page pair) must default to mock,
+  // never to live.
+  const useLive = document.getElementById("use-live")?.checked ?? false;
+  const body = { idea: currentIdea, use_live: useLive };
+  console.debug("validate request:", body);
+  resp = await fetch("/api/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   } catch {
     return showFormError("Could not reach the server. Is it running?");
   }

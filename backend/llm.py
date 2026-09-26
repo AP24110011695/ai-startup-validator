@@ -46,8 +46,6 @@ def call_llm(agent: str, system: str, user: str, schema: type[BaseModel]) -> Bas
     prompt on failure (long backoff for rate limits); raises QuotaError for
     permanent quota problems and LLMError once all attempts are exhausted.
     """
-    if config.FAKE_QUOTA_ERROR:
-        raise QuotaError("SIMULATED quota exhaustion (FAKE_QUOTA_ERROR=1)")
     prompt = user
     last_error: Exception | None = None
     last_was_rate_limit = False
@@ -55,6 +53,11 @@ def call_llm(agent: str, system: str, user: str, schema: type[BaseModel]) -> Bas
         try:
             if config.use_mock():
                 return schema.model_validate(_mock_response(agent, prompt))
+            if config.FAKE_QUOTA_ERROR:
+                # The quota simulation models the REAL provider only: mock runs
+                # stay instant and quota-free (regression: this check used to
+                # sit before the mode branch, so mock runs saw the quota screen).
+                raise QuotaError("SIMULATED quota exhaustion (FAKE_QUOTA_ERROR=1)")
             return schema.model_validate(_real_completion(agent, system, prompt, schema))
         except QuotaError:
             raise  # permanent conditions: missing key / simulated exhaustion
