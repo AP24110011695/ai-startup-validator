@@ -1,0 +1,16 @@
+.venv/
+.git/
+.gitignore
+.env
+logs/
+tests/
+__pycache__/
+*.pyc
+.pytest_cache/
+Dockerfile
+.dockerignore
+README.md
+PLAN.md
+IMPLEMENTATION.md
+PROGRESS.md
+LEARN.md

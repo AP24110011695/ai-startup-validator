@@ -73,3 +73,28 @@
 **Known issues:** none.
 
 **⏸️ PAUSED — waiting for the user to provide: `GEMINI_API_KEY` (required), `TAVILY_API_KEY` (recommended), `SERPAPI_API_KEY` (optional).**
+
+**✅ Pause resolved (same day):** user provided `GEMINI_API_KEY` + `TAVILY_API_KEY` (no SerpAPI — fine, it's an optional fallback). Wired into `.env` (gitignored), `USE_MOCK=false`. Real-mode findings and fixes: (1) `gemini-2.5-flash` returns 404 "no longer available to new users" → switched to `gemini-3.8-flash` (the API told us the replacement; key itself authenticated); (2) free tier hits 429s quickly → 429-class errors now retry with 15s/30s backoff and only convert to fatal `QuotaError` after all retries; transient 503 "high demand" spikes were observed and recovered via backoff in a live run; (3) `conftest.py` forces `USE_MOCK=true` for the test suite regardless of `.env` so pytest never touches real quota. **Live end-to-end verified:** full pipeline on a real idea returned 5 real competitors (Real Dog Box, Farm Hounds, PupJoy, BarkBox), real market analysis, and score 64 / "Needs Rework" with zero errors.
+
+## Phase 9 — Frontend UI
+**Status:** done (2026-09-27)
+
+**What was built:** `frontend/index.html` / `style.css` / `app.js` — three views (form → agent progress → report) toggled client-side; SSE consumption via EventSource; per-agent rows with queued/working/done/failed states and a pulsing dot; report with score badge (color-mapped by verdict band), verdict chip, MOCK DATA badge, warnings banners, competitor list with source links + similarity chips, market section, risks with severity chips, weak assumptions, failure modes, hardest-question callout; quota card ("Your API key limit has been reached… paste a new key") that POSTs `/api/key` and auto-retries the same idea. All rendering via `textContent` (no HTML injection from model output). Backend: SSE `error` event renamed `run_error` (a server event named "error" collides with EventSource's built-in connection-error event); agent `started` events now arrive in real time via a contextvar progress sink (`agents.progress_sink`) instead of post-node state snapshots, deduped against state replay in `main.py`. **Verified in a real browser:** form → progress (queued/working/done observed live) → full report render (screenshots checked against every no-AI-slop constraint: flat palette, white cards, no gradients/glass/robotry); quota flow tested with `FAKE_QUOTA_ERROR=1` (box appears, key paste → auto-retry → box re-appears, as expected under simulation); quota flow ALSO verified live with a real 429 during a real-mode run; invalid input shows the "too vague or too short" message with Start over. 37/37 tests pass after changes.
+
+**Assumptions:** server event named `run_error` instead of the planned `error` (EventSource collision — technical necessity); a third progress status `failed` is surfaced as a red state rather than collapsing into "finished"; report layout uses hand-written CSS design tokens (single accent #1d4ed8, semantic green/amber/red reserved for verdicts/status).
+
+**Known issues:** none.
+
+## Phase 10 — Testing, Error Handling Polish & Deployment Prep
+**Status:** done locally (2026-09-27); Render deployment itself requires the user's GitHub/Render accounts (exact steps in README)
+
+**What was built:** `tests/test_edge_cases.py` — vague input ("make money") completes gracefully via the agents (heuristic validator deliberately only rejects unusable input), ~5.5k-char input, total search failure at graph level (completes flagged `research_unverified`), LLM timeouts (retry → degrade with `High Risk` defaults), malformed LLM output (garbage string → 12 attempts → degrade), concurrent runs (two simultaneous runs complete independently); `Dockerfile` (python:3.12-slim, honors Render's `PORT`) + `.dockerignore` (secrets/tests/docs excluded — `.env` never enters the image); final README (architecture, reliability model, API reference, mock mode, exact Render deploy steps). **Verified:** 37/37 pytest pass; Docker image builds (`sha256:ae08949c…`) and the container serves `/health` + starts a run; `FAKE_QUOTA_ERROR` documented in `.env.example`.
+
+**Assumptions:** Render deployment was NOT executed — it requires a GitHub remote (no credentials in this environment) and the user's Render account; README contains the exact 6-step deploy procedure (push to GitHub → connect repo → Docker auto-detected → set env vars → deploy → expect 15-min spin-down / 30–60s wake on the free tier, no credit card).
+
+**Known issues:** the provided Gemini key's free-tier daily quota was exhausted during browser verification (live 429s, correctly surfaced the key-recovery UI); a full real-mode UI report run will work once quota resets (daily) or the user pastes a fresh key via the UI's key box — the flow is ready and was exercised with the real key during `/api/key` setup.
+
+## Final deliverable — LEARN.md
+**Status:** done (2026-09-27)
+
+`LEARN.md` written per IMPLEMENTATION.md §10: plain-English summary; architecture + LangGraph orchestration walkthrough; key concepts (agent state, tool grounding, per-agent prompts, rubric-in-code, layered retries, mock-vs-real, SSE, war stories); 8 likely interview questions with model answers; and why-choices for LangGraph, the 4 agents, FastAPI, vanilla frontend, Gemini, in-memory storage, and mock-first development.
