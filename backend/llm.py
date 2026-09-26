@@ -22,7 +22,7 @@ def call_llm(agent: str, system: str, user: str, schema: type[BaseModel]) -> Bas
 def _mock_response(agent: str, user: str) -> dict:
     """MOCK_MODE: canned, realistic JSON per agent; builders are added per phase."""
     logger.info("MOCK_MODE: canned LLM response for agent=%s", agent)
-    builders = {"researcher": _mock_researcher, "analyst": _mock_analyst, "critic": _mock_critic}
+    builders = {"researcher": _mock_researcher, "analyst": _mock_analyst, "critic": _mock_critic, "evaluator": _mock_evaluator}
     if agent not in builders:
         raise KeyError(f"no mock builder registered for agent={agent!r}")
     return builders[agent](_extract_idea(user))
@@ -82,4 +82,31 @@ def _mock_critic(idea: str) -> dict:
             "Positioning collapses into generic 'AI business tools' and acquisition costs explode",
         ],
         "hardest_question": f"Why would a founder pay for '{idea}' instead of prompting a general AI assistant for free?",
+    }
+
+
+def _mock_evaluator(idea: str) -> dict:
+    # Subscores are consistent with the canned upstream mock data; the node
+    # recomputes score/verdict from them, so 70/45/75/60/55 lands at 62 = "Needs Rework".
+    return {
+        "score": 62,
+        "subscores": {
+            "market_opportunity": 70,
+            "differentiation": 45,
+            "feasibility": 75,
+            "business_viability": 60,
+            "timing": 55,
+        },
+        "verdict": "Needs Rework",
+        "executive_summary": f"Mock evaluation for: {idea}. A real and growing market, but the MOCK_MODE sample shows a crowded space with a thin moat and weak retention economics.",
+        "strengths": [
+            "Large, growing market with clear demand signal",
+            "Low build cost — an MVP is cheap to ship and test",
+        ],
+        "recommendation": "Promising direction that needs a sharper wedge: niche down to one underserved founder segment and add a recurring reason to return before scaling spend.",
+        "next_steps": [
+            "Interview 20 first-time founders about their current validation process",
+            "Ship a one-page MVP scoring a single niche and measure completion rate",
+            "Test willingness to pay at $19 versus a free tool with paid upgrades",
+        ],
     }

@@ -44,3 +44,12 @@
 **Assumptions:** the critic gets no web search (plan positions it as judgment over upstream data); "referencing upstream facts" is spot-checked at the prompt level (upstream content reaches the LLM call) since the mock response is canned and can't literally cite upstream data.
 
 **Known issues:** none.
+
+## Phase 6 — Evaluator / Compiler Agent
+**Status:** done (2026-09-27)
+
+**What was built:** `evaluate_node()` in `backend/agents.py` — consumes idea + research + market + critique (read-only, formatted into the prompt via `_format_critique` helper added alongside the existing formatters); the LLM supplies dimension subscores, and the node **recomputes** the weighted total and verdict band in code from `RUBRIC_WEIGHTS` / `VERDICT_BANDS` (now defined as constants in `backend/prompts.py`, the rubric's documented home, alongside the prose weights in `EVALUATOR_PROMPT`). Mock evaluator builder added to `llm.py` (70/45/75/60/55 → 62 "Needs Rework", consistent with the canned upstream data). Rubric section added to README (per the plan task "documented in prompts.py + README"). `tests/test_evaluator.py` — 4 tests. **Verified:** 19/19 pytest pass — full 4-node pipeline yields a complete schema-valid `Report` (score 62 / "Needs Rework"); a forced wrong LLM total (99/"Promising") is corrected to the rubric result (0 → "High Risk"); evaluator writes only its own key and all upstream outputs survive byte-identical; rubric constants match the prompt prose and sum to 1.0.
+
+**Assumptions:** `schemas.py` needed no changes (FinalEvaluation was already complete from Phase 2 — the plan's "FinalEvaluation finalized" is a no-op); score/verdict are deliberately computed in code rather than trusted from the LLM (same deterministic-override pattern as `verified` in earlier nodes); README was edited in this phase despite not being in the phase's Files column because the task text explicitly requires the rubric documented there.
+
+**Known issues:** none.

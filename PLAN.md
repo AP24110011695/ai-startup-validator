@@ -243,18 +243,21 @@ Rule: any agent that fails after retries degrades gracefully (valid-but-empty ou
 
 ## Phase 10 — Testing, Error Handling Polish & Deployment Prep
 
-**Goal:** Harden edge cases, finalize docs, make it deployable.
+**Goal:** Harden edge cases, finalize docs, and deploy the app live on Render's free tier.
 
 **Tasks:**
 - [ ] Edge-case tests: vague input ("make money"), very long input, total search failure, LLM timeout, quota error, malformed LLM JSON (forced → retry path), two concurrent runs
 - [ ] Full pytest suite green (graph + API + schemas)
-- [ ] README.md final: what it is, architecture diagram, setup (Windows + Unix), required keys, mock vs real mode, demo script, API reference, scoring rubric
-- [ ] `Dockerfile` (single container: uvicorn serving API + static frontend) + `.dockerignore` + short deploy notes (Render/Railway/Fly)
+- [ ] README.md final: what it is, architecture diagram, setup (Windows + Unix), required keys, mock vs real mode, demo script, API reference, scoring rubric, and the exact Render deploy steps (connect GitHub repo, set env vars, deploy)
+- [ ] `Dockerfile` (single container: uvicorn serving API + static frontend) + `.dockerignore`
+- [ ] **Deploy to Render (free tier)** — one web service running the Dockerfile, serving both the FastAPI backend and the static frontend. No credit card required for this tier.
+  - Why Render only: Railway's free tier is a 30-day trial with $5 credit, then requires a paid plan — rejected, no risk of charges accepted. Fly.io requires a credit card for new users and has no free tier — rejected. Vercel isn't suitable: serverless functions have a 5-minute timeout and aren't built for a long-running FastAPI backend with SSE streaming — rejected.
+  - Expected behavior, not a bug to fix: free Render web services spin down after 15 minutes of inactivity and take 30–60 seconds to wake on the next request.
 - [ ] Real end-to-end: `USE_MOCK=false`, run 2–3 real ideas through the UI with the real key; fix whatever surfaces
 
 **Files:** `tests/`, `README.md`, `Dockerfile`, `.dockerignore`
 
-**Done when:** pytest suite green; real-key end-to-end validated through the UI; a stranger can clone + run from README alone; Docker image builds and serves the app.
+**Done when:** pytest suite green; real-key end-to-end validated through the UI; a stranger can clone + run from README alone; Docker image builds and serves the app; app is live on a Render free-tier URL, accessible without a credit card, and the README includes the exact Render deploy steps (connect GitHub repo, set env vars, deploy).
 
 ---
 

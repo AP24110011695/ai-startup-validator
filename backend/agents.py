@@ -8,8 +8,8 @@ import logging
 
 from backend.config import USE_MOCK
 from backend.llm import call_llm
-from backend.prompts import ANALYST_PROMPT, CRITIC_PROMPT, RESEARCHER_PROMPT
-from backend.schemas import Critique, MarketAnalysis, ResearchFindings
+from backend.prompts import ANALYST_PROMPT, CRITIC_PROMPT, EVALUATOR_PROMPT, RESEARCHER_PROMPT, RUBRIC_WEIGHTS, VERDICT_BANDS
+from backend.schemas import Critique, FinalEvaluation, MarketAnalysis, ResearchFindings
 from backend.tools import web_search
 
 logger = logging.getLogger(__name__)
@@ -127,4 +127,49 @@ def _format_market(market: dict) -> str:
     lines += [f"- Trend: {t}" for t in market.get("trends", [])]
     lines += [f"- Audience: {a}" for a in market.get("target_audience", [])]
     lines.append(f"Verified: {market.get('verified', False)}")
+    return "\n".join(lines)
+
+
+def evaluate_node(state: dict) -> dict:
+    """Evaluator/Compiler agent. Owner of state["evaluation"]: synthesizes research +
+    market + critique into a 0-100 feasibility score, verdict, and actionable summary.
+    The LLM supplies the dimension subscores; the weighted total and verdict band are
+    recomputed here from the rubric (backend/prompts.RUBRIC_WEIGHTS / VERDICT_BANDS)
+    so the headline number can't be skewed by model arithmetic.
+    """
+    idea = state["idea"]
+    logger.info("evaluate_node: started (mock_mode=%s)", USE_MOCK)
+    user = (
+        f"IDEA: {idea}\n\n"
+        f"RESEARCHER FINDINGS:\n{_format_research(state.get('research') or {})}\n\n"
+        f"MARKET ANALYSIS:\n{_format_market(state.get('market') or {})}\n\n"
+        f"CRITIQUE:\n{_format_critique(state.get('critique') or {})}"
+    )
+    evaluation = call_llm(agent="evaluator", system=EVALUATOR_PROMPT, user=user, schema=FinalEvaluation)
+    data = evaluation.model_dump()
+    data["score"] = _weighted_score(data["subscores"])
+    data["verdict"] = _verdict(data["score"])
+    return {"evaluation": data}
+
+
+def _weighted_score(subscores: dict) -> int:
+    total = sum(subscores.get(k, 0) * w for k, w in RUBRIC_WEIGHTS.items())
+    return max(0, min(100, round(total)))
+
+
+def _verdict(score: int) -> str:
+    for threshold, verdict in VERDICT_BANDS:
+        if score >= threshold:
+            return verdict
+    return "High Risk"
+
+
+def _format_critique(critique: dict) -> str:
+    if not critique:
+        return "No critique available."
+    lines = ["Risks:"]
+    lines += [f"- [{r.get('severity', '')}|{r.get('category', '')}] {r.get('risk', '')}" for r in critique.get("risks", [])]
+    lines += [f"Weak assumption: {a}" for a in critique.get("weak_assumptions", [])]
+    lines += [f"Failure mode: {f}" for f in critique.get("failure_modes", [])]
+    lines.append(f"Hardest question: {critique.get('hardest_question', '')}")
     return "\n".join(lines)

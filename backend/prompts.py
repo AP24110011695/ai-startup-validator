@@ -54,3 +54,16 @@ Rules:
 - "strengths" come from research/market, concerns implied by the critique.
 - 3-5 concrete, actionable "next_steps".
 """
+
+# Scoring rubric for the Evaluator agent: each dimension is scored 0-100 by the LLM,
+# but the weighted total and verdict band are computed in code (evaluate_node) so the
+# headline score can't be skewed by model arithmetic.
+RUBRIC_WEIGHTS = {
+    "market_opportunity": 0.25,
+    "differentiation": 0.20,
+    "feasibility": 0.20,
+    "business_viability": 0.20,
+    "timing": 0.15,
+}
+
+VERDICT_BANDS = ((75, "Promising"), (50, "Needs Rework"))  # score >= threshold; else "High Risk"
