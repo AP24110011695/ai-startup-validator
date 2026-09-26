@@ -22,7 +22,7 @@ def call_llm(agent: str, system: str, user: str, schema: type[BaseModel]) -> Bas
 def _mock_response(agent: str, user: str) -> dict:
     """MOCK_MODE: canned, realistic JSON per agent; builders are added per phase."""
     logger.info("MOCK_MODE: canned LLM response for agent=%s", agent)
-    builders = {"researcher": _mock_researcher, "analyst": _mock_analyst}
+    builders = {"researcher": _mock_researcher, "analyst": _mock_analyst, "critic": _mock_critic}
     if agent not in builders:
         raise KeyError(f"no mock builder registered for agent={agent!r}")
     return builders[agent](_extract_idea(user))
@@ -62,4 +62,24 @@ def _mock_analyst(idea: str) -> dict:
         ],
         "summary": f"Mock market analysis for: {idea}. Validation-tooling demand is growing; figures in this MOCK_MODE sample are illustrative.",
         "verified": True,
+    }
+
+
+def _mock_critic(idea: str) -> dict:
+    return {
+        "risks": [
+            {"risk": "Established AI assistants can bolt this on as a feature overnight", "severity": "high", "category": "competitive"},
+            {"risk": "One-time validation purchase — little reason to return, so lifetime value is tiny", "severity": "high", "category": "business model"},
+            {"risk": "AI-generated market data can be confidently wrong, and wrong validation is worse than none", "severity": "medium", "category": "product"},
+            {"risk": "Acquisition cost of first-time founders exceeds what a low-priced product repays", "severity": "medium", "category": "financial"},
+        ],
+        "weak_assumptions": [
+            "Founders will pay before building rather than after",
+            "LLM output is credible enough to base real decisions on",
+        ],
+        "failure_modes": [
+            "Free alternatives (a general AI assistant with a good prompt) capture the casual segment",
+            "Positioning collapses into generic 'AI business tools' and acquisition costs explode",
+        ],
+        "hardest_question": f"Why would a founder pay for '{idea}' instead of prompting a general AI assistant for free?",
     }

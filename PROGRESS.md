@@ -35,3 +35,12 @@
 **Assumptions:** "thin research" heuristic = unverified OR no sources (simple, deterministic); supplemental searches only enrich the prompt — they don't rewrite the researcher's findings; analyst's `verified` is optimistic-or-inherited (true if either the research was verified or its own searches succeeded).
 
 **Known issues:** none.
+
+## Phase 5 — Critic Agent
+**Status:** done (2026-09-27)
+
+**What was built:** `critique_node()` in `backend/agents.py` — devil's-advocate pass consuming idea + research + market (all read-only, formatted into the prompt via `_format_research` / `_format_market` helpers; no web search — it's a judgment pass over upstream data); returns schema-valid `Critique` (risks with severity/category, weak assumptions, failure modes, hardest question). Mock critic builder added to `backend/llm.py` (consistent with the mock research/market universe). Severity rubric was already documented in `prompts.py` (Phase 2). `tests/test_critic.py` — 3 tests. **Verified:** 15/15 pytest pass — 3-node chained run; every risk severity within high/medium/low with at least one high; grounding spot-check proves upstream facts (competitor names, market summary, idea) reach the critic's prompt; merged state holds research + market + critique simultaneously with nothing overwritten.
+
+**Assumptions:** the critic gets no web search (plan positions it as judgment over upstream data); "referencing upstream facts" is spot-checked at the prompt level (upstream content reaches the LLM call) since the mock response is canned and can't literally cite upstream data.
+
+**Known issues:** none.

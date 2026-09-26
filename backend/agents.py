@@ -8,8 +8,8 @@ import logging
 
 from backend.config import USE_MOCK
 from backend.llm import call_llm
-from backend.prompts import ANALYST_PROMPT, RESEARCHER_PROMPT
-from backend.schemas import MarketAnalysis, ResearchFindings
+from backend.prompts import ANALYST_PROMPT, CRITIC_PROMPT, RESEARCHER_PROMPT
+from backend.schemas import Critique, MarketAnalysis, ResearchFindings
 from backend.tools import web_search
 
 logger = logging.getLogger(__name__)
@@ -100,4 +100,31 @@ def _format_research(research: dict) -> str:
     lines = [f"Summary: {research.get('summary', '')}", "Competitors:"]
     lines += [f"- {c.get('name')}: {c.get('description', '')}" for c in research.get("competitors", [])]
     lines += [f"Sources: {', '.join(research.get('sources', []))}", f"Verified: {research.get('verified', False)}"]
+    return "\n".join(lines)
+
+
+def critique_node(state: dict) -> dict:
+    """Critic agent. Owner of state["critique"]: devil's-advocate risks, weak
+    assumptions, failure modes. Consumes idea + research + market without
+    modifying them; no web search — this is a judgment pass over upstream data.
+    """
+    idea = state["idea"]
+    logger.info("critique_node: started (mock_mode=%s)", USE_MOCK)
+    user = (
+        f"IDEA: {idea}\n\n"
+        f"RESEARCHER FINDINGS:\n{_format_research(state.get('research') or {})}\n\n"
+        f"MARKET ANALYSIS:\n{_format_market(state.get('market') or {})}"
+    )
+    critique = call_llm(agent="critic", system=CRITIC_PROMPT, user=user, schema=Critique)
+    return {"critique": critique.model_dump()}
+
+
+def _format_market(market: dict) -> str:
+    if not market:
+        return "No market analysis available."
+    lines = [f"Summary: {market.get('summary', '')}"]
+    lines += [f"- Size: {e.get('text', '')} (basis: {e.get('basis', '')}, confidence: {e.get('confidence', '')})" for e in market.get("market_size", [])]
+    lines += [f"- Trend: {t}" for t in market.get("trends", [])]
+    lines += [f"- Audience: {a}" for a in market.get("target_audience", [])]
+    lines.append(f"Verified: {market.get('verified', False)}")
     return "\n".join(lines)
