@@ -17,3 +17,12 @@
 **Assumptions:** added `input_rejected: bool` to state (written by `validate_idea` in Phase 7) as the conditional-edge signal — it was implied by the PLAN.md graph but not named as a field until now. Added a small permanent test file (`tests/test_schemas.py`) beyond the plan's file list to lock the acceptance criteria ("schemas round-trip") into the suite.
 
 **Known issues:** none.
+
+## Phase 3 — Researcher Agent
+**Status:** done (2026-09-27)
+
+**What was built:** `backend/tools.py` — `web_search()`: mock → Tavily REST → SerpAPI REST (via httpx, explicit 15s timeouts, every provider failure logged, empty list = "no live results"); `backend/llm.py` — `call_llm(agent, system, user, schema)` with the mock implementation (canned per-agent JSON, validated through the target schema) and the same signature the real Gemini call gets in Phase 8; `backend/agents.py` — `research_node()` (heuristic 3-query generation → search → LLM extraction/dedup → `ResearchFindings`) with LLM-knowledge fallback: no search results ⇒ `verified=false` + `research_unverified` flag + `search_unavailable` errors entry; `tests/test_research.py` — 4 tests. **Verified:** 8/8 pytest pass (happy path schema-valid + verified; degraded path flagged + logged; ownership of `research` key; provider-failure logging).
+
+**Assumptions:** search implemented against Tavily/SerpAPI REST endpoints directly via httpx for guaranteed explicit timeouts, so `tavily-python` is currently installed-but-unused (left in requirements.txt for now); search-query generation is heuristic (no extra LLM call); `verified` is set deterministically from search success rather than trusting the LLM's own claim; LLM-call-level retry + real Gemini call deliberately deferred to Phase 8 (untestable before a key), node-level retry wrapper in Phase 7 per plan.
+
+**Known issues:** none.
