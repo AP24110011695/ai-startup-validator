@@ -22,7 +22,7 @@ def call_llm(agent: str, system: str, user: str, schema: type[BaseModel]) -> Bas
 def _mock_response(agent: str, user: str) -> dict:
     """MOCK_MODE: canned, realistic JSON per agent; builders are added per phase."""
     logger.info("MOCK_MODE: canned LLM response for agent=%s", agent)
-    builders = {"researcher": _mock_researcher}
+    builders = {"researcher": _mock_researcher, "analyst": _mock_analyst}
     if agent not in builders:
         raise KeyError(f"no mock builder registered for agent={agent!r}")
     return builders[agent](_extract_idea(user))
@@ -41,5 +41,25 @@ def _mock_researcher(idea: str) -> dict:
         ],
         "summary": f"Mock research for: {idea}. The AI idea-validation space is active with a few direct tools; no dominant player is visible in this MOCK_MODE sample.",
         "sources": ["https://example.com/validation-tools", "https://example.com/vc-evaluation"],
+        "verified": True,
+    }
+
+
+def _mock_analyst(idea: str) -> dict:
+    return {
+        "market_size": [
+            {"text": "$4.2B global market for startup-idea validation and market-research tooling", "basis": "MOCK_MODE sample figure", "confidence": "low"},
+            {"text": "$850M serviceable segment among first-time founders in English-speaking markets", "basis": "MOCK_MODE sample figure", "confidence": "low"},
+        ],
+        "trends": [
+            "Founders increasingly use AI tooling instead of paid consultants for early diligence",
+            "Investors now expect data-backed validation before pre-seed pitches",
+        ],
+        "target_audience": [
+            "First-time founders validating an idea before building",
+            "Indie hackers and solo entrepreneurs choosing between ideas",
+            "Startup accelerators screening applicant ideas",
+        ],
+        "summary": f"Mock market analysis for: {idea}. Validation-tooling demand is growing; figures in this MOCK_MODE sample are illustrative.",
         "verified": True,
     }

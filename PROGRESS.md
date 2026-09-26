@@ -26,3 +26,12 @@
 **Assumptions:** search implemented against Tavily/SerpAPI REST endpoints directly via httpx for guaranteed explicit timeouts, so `tavily-python` is currently installed-but-unused (left in requirements.txt for now); search-query generation is heuristic (no extra LLM call); `verified` is set deterministically from search success rather than trusting the LLM's own claim; LLM-call-level retry + real Gemini call deliberately deferred to Phase 8 (untestable before a key), node-level retry wrapper in Phase 7 per plan.
 
 **Known issues:** none.
+
+## Phase 4 — Market Analyst Agent
+**Status:** done (2026-09-27)
+
+**What was built:** `analyze_market_node()` in `backend/agents.py` — consumes the researcher's findings read-only (formatted into its prompt), decides research is "thin" when it is unverified or source-less and then runs 2 targeted searches of its own (market-size/TAM + industry-trends queries); output validated as `MarketAnalysis`; `verified` computed deterministically (research verified OR own searches returned live data), with `market_unverified` flag + `data_unverified` errors entry in the degraded case. Mock analyst builder added to `backend/llm.py`. `tests/test_analyst.py` — 4 tests. **Verified:** 12/12 pytest pass — chained research→analyst proves state passing; merged state keeps `research` byte-identical (append/merge rule); degraded no-research path flags unverified and performs exactly 2 supplemental searches; solid research triggers no extra searches.
+
+**Assumptions:** "thin research" heuristic = unverified OR no sources (simple, deterministic); supplemental searches only enrich the prompt — they don't rewrite the researcher's findings; analyst's `verified` is optimistic-or-inherited (true if either the research was verified or its own searches succeeded).
+
+**Known issues:** none.
