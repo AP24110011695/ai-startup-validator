@@ -50,6 +50,17 @@ textarea {
 }
 textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
 
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+.toggle-row input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; flex: none; }
+.toggle-hint { color: var(--ink-soft); font-size: 0.85rem; }
+
 .primary-btn {
   margin-top: 1rem;
   padding: 0.7rem 1.4rem;

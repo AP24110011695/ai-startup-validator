@@ -1,5 +1,6 @@
 """Settings loaded once from .env / environment; the single import point for config."""
 import os
+from contextvars import ContextVar
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -17,6 +18,18 @@ API_KEYS: dict[str, str] = {
     "TAVILY_API_KEY": os.getenv("TAVILY_API_KEY", ""),
     "SERPAPI_API_KEY": os.getenv("SERPAPI_API_KEY", ""),
 }
+
+# Per-run mock override, set by the API layer inside each run's thread (None =
+# fall back to the USE_MOCK env default). Contextvar so concurrent runs with
+# different toggle states never cross wires.
+mock_override: ContextVar[bool | None] = ContextVar("mock_override", default=None)
+
+
+def use_mock() -> bool:
+    """Effective mock mode for the current run: the per-request toggle wins over
+    the server-level USE_MOCK env default."""
+    override = mock_override.get()
+    return USE_MOCK if override is None else override
 
 
 def set_api_key(name: str, value: str) -> None:

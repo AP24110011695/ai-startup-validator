@@ -98,3 +98,11 @@
 **Status:** done (2026-09-27)
 
 `LEARN.md` written per IMPLEMENTATION.md §10: plain-English summary; architecture + LangGraph orchestration walkthrough; key concepts (agent state, tool grounding, per-agent prompts, rubric-in-code, layered retries, mock-vs-real, SSE, war stories); 8 likely interview questions with model answers; and why-choices for LangGraph, the 4 agents, FastAPI, vanilla frontend, Gemini, in-memory storage, and mock-first development.
+
+## Post-completion addition — per-request Live/Mock toggle (2026-09-27)
+
+**What was built (user request):** a UI checkbox on the form ("Use live AI (real Gemini + Tavily calls — may hit free-tier limits; off = instant mock demo)", default OFF = mock) that sends `use_live` with each `POST /api/validate`. Semantics: `use_live=true` → live pipeline, `use_live=false` → mock, field absent → server-level `USE_MOCK` default (unchanged). Implementation: `config.mock_override` (contextvar, set per run inside the run's thread in `_execute_run`, reset in `finally` — concurrent runs with different modes stay independent); `config.use_mock()` resolves override → env default and is now the single mode switch used by `call_llm`, `web_search`, agent log lines, and `_build_report` (so the report's MOCK badge/warnings reflect the *run's* mode, not the server's). UI: toggle in `index.html` + `app.js` sends the flag; CSS tokens for the row. Tests: `tests/test_toggle.py` (5 tests — resolution priority, call_llm routing both ways with a faked `_real_completion`, API-level toggle-off-forces-mock-on-a-real-default-server, toggle-on-takes-live-path, absent-field-falls-back) + updated `test_research.py` (provider-failure test now uses the contextvar instead of patching `tools.USE_MOCK`). **Verified:** 42/42 pytest pass; live server check — explicit `use_live:false` and absent field both produce mock reports. The live-branch routing is proven with fakes; a real live run from the UI additionally needs non-exhausted key quota (known issue above).
+
+**Assumptions:** default OFF (mock) is deliberately the safe path per the user's request, even on a real-mode server; `use_live` is optional (`bool | None`) so curl/older clients without the field keep the old server-default behavior.
+
+**Known issues:** none.

@@ -37,6 +37,9 @@ STREAM_MAX_SECONDS = 600  # real runs with rate-limit backoffs can take a few mi
 
 class ValidateRequest(BaseModel):
     idea: str
+    # Per-run mode from the UI toggle: True = live pipeline, False = mock,
+    # absent = use the server-level USE_MOCK default.
+    use_live: bool | None = None
 
 
 class KeyRequest(BaseModel):
@@ -58,7 +61,9 @@ def start_validation(req: ValidateRequest) -> dict:
         "run_id": run_id, "idea": idea, "status": "running",
         "events": [], "report": None, "error": None, "done": threading.Event(),
     }
-    threading.Thread(target=_execute_run, args=(run_id, idea), daemon=True, name=f"run-{run_id}").start()
+    # Toggle ON -> live (mock=False); OFF -> mock; absent -> None (env default).
+    mock_override = None if req.use_live is None else not req.use_live
+    threading.Thread(target=_execute_run, args=(run_id, idea, mock_override), daemon=True, name=f"run-{run_id}").start()
     return {"run_id": run_id}
 
 
@@ -92,10 +97,12 @@ def update_key(req: KeyRequest) -> dict:
     return {"ok": True}
 
 
-def _execute_run(run_id: str, idea: str) -> None:
+def _execute_run(run_id: str, idea: str, mock_override: bool | None) -> None:
     """Thread body: stream the graph, pushing SSE events as agents complete.
     agent_status events arrive in real time via the progress sink (a node's
     "started" pushes the moment it begins); the state replay dedupes against them.
+    The mode override is bound to this run's thread context so concurrent runs
+    with different toggle states stay independent.
     """
     run = RUNS[run_id]
     seen: set[str] = set()
@@ -107,16 +114,17 @@ def _execute_run(run_id: str, idea: str) -> None:
         seen.add(key)
         _push(run, "agent_status", event)
 
+    mode_token = config.mock_override.set(mock_override)
     try:
         state: dict = {}
-        token = agents.progress_sink.set(emit)
+        progress_token = agents.progress_sink.set(emit)
         try:
             for snapshot in GRAPH.stream({"idea": idea, "run_id": run_id, "created_at": now_iso()}, stream_mode="values"):
                 state = snapshot
                 for event in state.get("progress", []):
                     emit(event)
         finally:
-            agents.progress_sink.reset(token)
+            agents.progress_sink.reset(progress_token)
         if state.get("input_rejected"):
             detail = next((e for e in state.get("errors", []) if e.get("type") == "invalid_input"), {})
             _fail(run, "invalid_input", detail.get("message", "Please describe your idea in more detail."))
@@ -131,14 +139,16 @@ def _execute_run(run_id: str, idea: str) -> None:
         logger.exception("run %s failed", run_id)
         _fail(run, "llm_error", str(exc))
     finally:
+        config.mock_override.reset(mode_token)
         run["done"].set()
 
 
 def _build_report(idea: str, state: dict) -> dict:
     """Assemble the UI-facing report from the final graph state; degraded paths
     (mock data, unverified research, failed agents) surface as warnings."""
+    run_is_mock = config.use_mock()
     warnings = []
-    if USE_MOCK:
+    if run_is_mock:
         warnings.append("MOCK MODE: generated from canned sample data, not real analysis.")
     flags = state.get("data_flags", [])
     if "research_unverified" in flags:
@@ -147,7 +157,7 @@ def _build_report(idea: str, state: dict) -> dict:
         warnings.append("Market analysis lacks live data.")
     warnings += [f"{e['agent']} agent failed: {e['message'][:120]}" for e in state.get("errors", []) if e.get("type") == "llm_error"]
     report = Report(
-        idea=idea, generated_at=now_iso(), mock_mode=USE_MOCK,
+        idea=idea, generated_at=now_iso(), mock_mode=run_is_mock,
         research=state.get("research") or {},
         market=state.get("market") or {},
         critique=state.get("critique") or {},

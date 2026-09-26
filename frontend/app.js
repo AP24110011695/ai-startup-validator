@@ -38,7 +38,7 @@ async function startRun() {
     resp = await fetch("/api/validate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idea: currentIdea }),
+      body: JSON.stringify({ idea: currentIdea, use_live: $("use-live").checked }),
     });
   } catch {
     return showFormError("Could not reach the server. Is it running?");

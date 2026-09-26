@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel
 
-from backend.config import USE_MOCK
+from backend import config
 from backend.llm import QuotaError, call_llm
 from backend.prompts import ANALYST_PROMPT, CRITIC_PROMPT, EVALUATOR_PROMPT, RESEARCHER_PROMPT, RUBRIC_WEIGHTS, VERDICT_BANDS
 from backend.schemas import Critique, FinalEvaluation, MarketAnalysis, ResearchFindings
@@ -25,7 +25,7 @@ def research_node(state: dict) -> dict:
     knowledge and the output is flagged unverified.
     """
     idea = state["idea"]
-    logger.info("research_node: started (mock_mode=%s)", USE_MOCK)
+    logger.info("research_node: started (mock_mode=%s)", config.use_mock())
 
     results: list[dict] = []
     for query in _research_queries(idea):
@@ -67,7 +67,7 @@ def analyze_market_node(state: dict) -> dict:
     idea = state["idea"]
     research = state.get("research") or {}
     research_verified = bool(research.get("verified"))
-    logger.info("analyze_market_node: started (mock_mode=%s)", USE_MOCK)
+    logger.info("analyze_market_node: started (mock_mode=%s)", config.use_mock())
 
     findings_block = _format_research(research)
     extra: list[dict] = []
@@ -113,7 +113,7 @@ def critique_node(state: dict) -> dict:
     modifying them; no web search — this is a judgment pass over upstream data.
     """
     idea = state["idea"]
-    logger.info("critique_node: started (mock_mode=%s)", USE_MOCK)
+    logger.info("critique_node: started (mock_mode=%s)", config.use_mock())
     user = (
         f"IDEA: {idea}\n\n"
         f"RESEARCHER FINDINGS:\n{_format_research(state.get('research') or {})}\n\n"
@@ -142,7 +142,7 @@ def evaluate_node(state: dict) -> dict:
     so the headline number can't be skewed by model arithmetic.
     """
     idea = state["idea"]
-    logger.info("evaluate_node: started (mock_mode=%s)", USE_MOCK)
+    logger.info("evaluate_node: started (mock_mode=%s)", config.use_mock())
     user = (
         f"IDEA: {idea}\n\n"
         f"RESEARCHER FINDINGS:\n{_format_research(state.get('research') or {})}\n\n"

@@ -15,7 +15,6 @@ import time
 from pydantic import BaseModel
 
 from backend import config
-from backend.config import USE_MOCK
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ def call_llm(agent: str, system: str, user: str, schema: type[BaseModel]) -> Bas
     last_was_rate_limit = False
     for attempt in range(1 + MAX_LLM_RETRIES):
         try:
-            if USE_MOCK:
+            if config.use_mock():
                 return schema.model_validate(_mock_response(agent, prompt))
             return schema.model_validate(_real_completion(agent, system, prompt, schema))
         except QuotaError:

@@ -7,7 +7,7 @@ import logging
 
 import httpx
 
-from backend.config import API_KEYS, USE_MOCK
+from backend import config
 
 logger = logging.getLogger(__name__)
 SEARCH_TIMEOUT = 15  # seconds, explicit per the error-handling rules
@@ -15,7 +15,7 @@ SEARCH_TIMEOUT = 15  # seconds, explicit per the error-handling rules
 
 def web_search(query: str) -> list[dict]:
     """Try providers in order (mock -> Tavily -> SerpAPI); [] on total failure."""
-    if USE_MOCK:
+    if config.use_mock():
         return mock_search(query)
     for provider in (_tavily_search, _serpapi_search):
         try:
@@ -29,7 +29,7 @@ def web_search(query: str) -> list[dict]:
 
 
 def _tavily_search(query: str) -> list[dict]:
-    key = API_KEYS["TAVILY_API_KEY"]
+    key = config.API_KEYS["TAVILY_API_KEY"]
     if not key:
         raise RuntimeError("no Tavily API key configured")
     resp = httpx.post(
@@ -42,7 +42,7 @@ def _tavily_search(query: str) -> list[dict]:
 
 
 def _serpapi_search(query: str) -> list[dict]:
-    key = API_KEYS["SERPAPI_API_KEY"]
+    key = config.API_KEYS["SERPAPI_API_KEY"]
     if not key:
         raise RuntimeError("no SerpAPI key configured")
     resp = httpx.get(

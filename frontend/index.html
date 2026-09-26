@@ -19,6 +19,10 @@
         <label for="idea">Your business idea</label>
         <textarea id="idea" rows="5" required
           placeholder="e.g. A subscription box of regional snacks curated by local chefs, delivered monthly"></textarea>
+        <label class="toggle-row">
+          <input type="checkbox" id="use-live">
+          <span>Use live AI <span class="toggle-hint">(real Gemini + Tavily calls — may hit free-tier limits; off = instant mock demo)</span></span>
+        </label>
         <button type="submit" class="primary-btn">Validate my idea</button>
         <p id="form-error" class="error-text" hidden></p>
       </form>

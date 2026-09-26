@@ -34,10 +34,14 @@ def test_research_node_writes_only_its_own_keys(monkeypatch):
 
 
 def test_web_search_all_providers_fail_is_logged(monkeypatch, caplog):
+    from backend import config
     from backend.tools import web_search
 
-    monkeypatch.setattr("backend.tools.USE_MOCK", False)
-    monkeypatch.setattr("backend.tools.API_KEYS", {"TAVILY_API_KEY": "", "SERPAPI_API_KEY": ""})
-    with caplog.at_level(logging.WARNING):
-        assert web_search("competitors for X") == []
+    monkeypatch.setattr(config, "API_KEYS", {"TAVILY_API_KEY": "", "SERPAPI_API_KEY": ""})
+    token = config.mock_override.set(False)  # force the real-provider path
+    try:
+        with caplog.at_level(logging.WARNING):
+            assert web_search("competitors for X") == []
+    finally:
+        config.mock_override.reset(token)
     assert "search provider failed" in caplog.text
