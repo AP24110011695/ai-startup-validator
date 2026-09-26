@@ -1,10 +1,13 @@
 """Agent node functions. Each returns a partial state update and writes ONLY its
 own state key (see backend/state.py ownership table).
 
-LLM exceptions propagate: the graph-level retry wrapper (Phase 7) handles
-retry-then-degrade uniformly for every node.
+with_retry is the graph-level safety net: progress events in/out, and a degraded-
+but-valid output + errors entry if a node still raises after call_llm's retries.
 """
 import logging
+from datetime import datetime, timezone
+
+from pydantic import BaseModel
 
 from backend.config import USE_MOCK
 from backend.llm import call_llm
@@ -173,3 +176,36 @@ def _format_critique(critique: dict) -> str:
     lines += [f"Failure mode: {f}" for f in critique.get("failure_modes", [])]
     lines.append(f"Hardest question: {critique.get('hardest_question', '')}")
     return "\n".join(lines)
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def with_retry(node, agent: str, output_key: str, schema: type[BaseModel]):
+    """Graph-level safety net around one agent node.
+
+    Appends progress events (started/finished/failed — feeds Phase 8 SSE) and, if
+    the node still raises after call_llm's retries, substitutes a degraded
+    schema-valid output plus an errors entry, so the graph never aborts because
+    one agent failed.
+    """
+
+    def wrapped(state: dict) -> dict:
+        updates: dict = {"progress": [{"agent": agent, "status": "started", "ts": now_iso()}]}
+        try:
+            node_updates = node(state)
+        except Exception as exc:
+            logger.exception("%s_node failed after all LLM retries; degrading", agent)
+            degraded = schema().model_dump()
+            if "summary" in degraded:
+                degraded["summary"] = f"{agent} failed; no output available."
+            updates[output_key] = degraded
+            updates["errors"] = [{"agent": agent, "type": "llm_error", "message": str(exc)}]
+            updates["progress"].append({"agent": agent, "status": "failed", "ts": now_iso()})
+            return updates
+        updates.update(node_updates)
+        updates["progress"].append({"agent": agent, "status": "finished", "ts": now_iso()})
+        return updates
+
+    return wrapped

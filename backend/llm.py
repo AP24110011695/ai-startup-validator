@@ -1,6 +1,11 @@
 """LLM access. USE_MOCK=true routes to canned per-agent responses; the real Gemini
-call (with retry + quota/error mapping) lands in Phase 8 behind the same signature.
+call (plus quota/error mapping) lands in Phase 8 behind the same signature.
+
+call_llm implements the error-handling rules: on any failure it retries up to
+MAX_LLM_RETRIES times with an adjusted prompt, then raises LLMError — the graph's
+node wrapper turns that into a degraded-but-valid output so the pipeline continues.
 """
+import json
 import logging
 
 from pydantic import BaseModel
@@ -9,14 +14,38 @@ from backend.config import USE_MOCK
 
 logger = logging.getLogger(__name__)
 
+MAX_LLM_RETRIES = 2
+
+
+class LLMError(RuntimeError):
+    """Raised when an agent's LLM call fails on the initial attempt and all retries."""
+
 
 def call_llm(agent: str, system: str, user: str, schema: type[BaseModel]) -> BaseModel:
-    """One agent turn: returns schema-validated output. Raises on failure —
-    the graph-level retry wrapper (Phase 7) decides whether to retry or degrade.
+    """One agent turn: returns schema-validated output. Retries with an adjusted
+    prompt on failure; raises LLMError once all attempts are exhausted.
     """
-    if USE_MOCK:
-        return schema.model_validate(_mock_response(agent, user))
-    raise NotImplementedError("real LLM calls are wired in Phase 8")
+    prompt = user
+    last_error: Exception | None = None
+    for attempt in range(1 + MAX_LLM_RETRIES):
+        try:
+            if USE_MOCK:
+                return schema.model_validate(_mock_response(agent, prompt))
+            raise NotImplementedError("real LLM calls are wired in Phase 8")
+        except NotImplementedError:
+            raise
+        except Exception as exc:
+            last_error = exc
+            logger.warning(
+                "call_llm: attempt %d/%d for agent=%s failed: %s",
+                attempt + 1, 1 + MAX_LLM_RETRIES, agent, exc,
+            )
+            prompt = _adjusted_prompt(user, schema)
+    raise LLMError(f"{agent}: LLM failed after {1 + MAX_LLM_RETRIES} attempts") from last_error
+
+
+def _adjusted_prompt(user: str, schema: type[BaseModel]) -> str:
+    return f"{user}\n\nIMPORTANT: Respond ONLY with valid JSON matching this schema: {json.dumps(schema.model_json_schema())}"
 
 
 def _mock_response(agent: str, user: str) -> dict:
