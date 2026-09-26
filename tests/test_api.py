@@ -71,7 +71,7 @@ def test_missing_idea_422():
 def test_invalid_idea_streams_error():
     run_id = _start("hi")
     events = _collect(run_id)
-    assert events[-1][0] == "error"
+    assert events[-1][0] == "run_error"
     assert events[-1][1]["code"] == "invalid_input"
     assert events[-1][1]["message"]
     assert client.get(f"/api/runs/{run_id}").json()["status"] == "error"
@@ -81,7 +81,7 @@ def test_quota_simulation_streams_quota_exceeded(monkeypatch):
     monkeypatch.setattr(config, "FAKE_QUOTA_ERROR", True)
     run_id = _start(IDEA)
     events = _collect(run_id)
-    assert events[-1][0] == "error"
+    assert events[-1][0] == "run_error"
     assert events[-1][1]["code"] == "quota_exceeded"
     assert client.get(f"/api/runs/{run_id}").json()["status"] == "error"
 

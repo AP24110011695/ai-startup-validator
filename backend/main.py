@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from backend import config
+from backend import agents, config
 from backend.agents import now_iso
 from backend.config import ROOT, USE_MOCK
 from backend.graph import GRAPH
@@ -93,16 +93,30 @@ def update_key(req: KeyRequest) -> dict:
 
 
 def _execute_run(run_id: str, idea: str) -> None:
-    """Thread body: stream the graph, pushing SSE events as agents complete."""
+    """Thread body: stream the graph, pushing SSE events as agents complete.
+    agent_status events arrive in real time via the progress sink (a node's
+    "started" pushes the moment it begins); the state replay dedupes against them.
+    """
     run = RUNS[run_id]
+    seen: set[str] = set()
+
+    def emit(event: dict) -> None:
+        key = json.dumps(event, sort_keys=True)
+        if key in seen:
+            return
+        seen.add(key)
+        _push(run, "agent_status", event)
+
     try:
-        emitted = 0
         state: dict = {}
-        for snapshot in GRAPH.stream({"idea": idea, "run_id": run_id, "created_at": now_iso()}, stream_mode="values"):
-            state = snapshot
-            for event in state.get("progress", [])[emitted:]:
-                emitted += 1
-                _push(run, "agent_status", event)
+        token = agents.progress_sink.set(emit)
+        try:
+            for snapshot in GRAPH.stream({"idea": idea, "run_id": run_id, "created_at": now_iso()}, stream_mode="values"):
+                state = snapshot
+                for event in state.get("progress", []):
+                    emit(event)
+        finally:
+            agents.progress_sink.reset(token)
         if state.get("input_rejected"):
             detail = next((e for e in state.get("errors", []) if e.get("type") == "invalid_input"), {})
             _fail(run, "invalid_input", detail.get("message", "Please describe your idea in more detail."))
@@ -144,8 +158,10 @@ def _build_report(idea: str, state: dict) -> dict:
 
 
 def _fail(run: dict, code: str, message: str) -> None:
+    # "run_error" rather than "error": a server event named "error" would collide
+    # with EventSource's built-in connection-error event in the browser.
     run["error"] = {"code": code, "message": message}
-    _push(run, "error", run["error"])
+    _push(run, "run_error", run["error"])
     run["status"] = "error"
 
 

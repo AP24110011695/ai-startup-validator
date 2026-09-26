@@ -4,11 +4,99 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Startup Validator</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main style="max-width: 40rem; margin: 6rem auto; font-family: system-ui, sans-serif;">
-    <h1>AI Startup Validator</h1>
-    <p>Placeholder page — the real UI arrives in Phase 9.</p>
+  <main class="container">
+    <header class="app-header">
+      <h1>AI Startup Validator</h1>
+      <p class="tagline">Describe your business idea. Four AI agents research the competition, size the market, stress-test the concept, and score its feasibility.</p>
+    </header>
+
+    <!-- View 1: input form -->
+    <section id="view-form" class="view">
+      <form id="idea-form">
+        <label for="idea">Your business idea</label>
+        <textarea id="idea" rows="5" required
+          placeholder="e.g. A subscription box of regional snacks curated by local chefs, delivered monthly"></textarea>
+        <button type="submit" class="primary-btn">Validate my idea</button>
+        <p id="form-error" class="error-text" hidden></p>
+      </form>
+    </section>
+
+    <!-- View 2: agent progress -->
+    <section id="view-progress" class="view" hidden>
+      <h2 class="view-title">Analyzing your idea</h2>
+      <p class="idea-echo" id="progress-idea"></p>
+      <ul id="agent-list" class="agent-list"></ul>
+      <div id="quota-box" class="quota-box" hidden>
+        <p><strong>Your API key limit has been reached.</strong> Paste a new API key below to continue — no restart needed.</p>
+        <form id="key-form" class="key-form">
+          <input type="password" id="new-key" placeholder="Paste a new Gemini API key" autocomplete="off" required>
+          <button type="submit" class="primary-btn">Save key &amp; retry</button>
+        </form>
+        <p id="key-error" class="error-text" hidden></p>
+      </div>
+      <p id="progress-error" class="error-text" hidden></p>
+      <button id="start-over" class="link-btn" hidden>Start over</button>
+    </section>
+
+    <!-- View 3: report -->
+    <section id="view-report" class="view" hidden>
+      <div class="report-head">
+        <div class="score-block">
+          <span class="score" id="score">–</span>
+          <span class="score-label">/ 100<br>feasibility</span>
+        </div>
+        <div class="report-head-text">
+          <span class="verdict-chip" id="verdict">–</span>
+          <span class="mock-badge" id="mock-badge" hidden>MOCK DATA</span>
+          <p class="idea-echo" id="report-idea"></p>
+        </div>
+      </div>
+
+      <div id="warnings" class="warnings" hidden></div>
+
+      <section class="report-section">
+        <h2>Summary</h2>
+        <p id="summary"></p>
+        <h3>Recommendation</h3>
+        <p id="recommendation"></p>
+        <h3>Suggested next steps</h3>
+        <ul id="next-steps" class="plain-list"></ul>
+      </section>
+
+      <section class="report-section">
+        <div class="section-title-row">
+          <h2>Competitive research</h2>
+          <span id="research-verified" class="verified-note"></span>
+        </div>
+        <ul id="competitors" class="competitor-list"></ul>
+      </section>
+
+      <section class="report-section">
+        <h2>Market analysis</h2>
+        <h3>Market size</h3>
+        <ul id="market-size" class="plain-list"></ul>
+        <h3>Trends</h3>
+        <ul id="trends" class="plain-list"></ul>
+        <h3>Target audience</h3>
+        <ul id="audience" class="plain-list"></ul>
+      </section>
+
+      <section class="report-section">
+        <h2>Risks &amp; weak points</h2>
+        <ul id="risks" class="risk-list"></ul>
+        <h3>Weak assumptions</h3>
+        <ul id="assumptions" class="plain-list"></ul>
+        <h3>How it could fail</h3>
+        <ul id="failure-modes" class="plain-list"></ul>
+        <p id="hardest-question" class="hardest-question"></p>
+      </section>
+
+      <button id="new-report" class="link-btn">Validate another idea</button>
+    </section>
   </main>
+  <script src="app.js"></script>
 </body>
 </html>

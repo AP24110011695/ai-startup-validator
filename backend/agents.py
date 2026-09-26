@@ -4,6 +4,7 @@ own state key (see backend/state.py ownership table).
 with_retry is the graph-level safety net: progress events in/out, and a degraded-
 but-valid output + errors entry if a node still raises after call_llm's retries.
 """
+import contextvars
 import logging
 from datetime import datetime, timezone
 
@@ -182,6 +183,18 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# Optional real-time progress hook, set per run by the API layer (contextvar so
+# concurrent runs never cross wires). state.progress stays the durable record
+# whether or not a sink is attached.
+progress_sink: contextvars.ContextVar = contextvars.ContextVar("progress_sink", default=None)
+
+
+def _emit(event: dict) -> None:
+    sink = progress_sink.get()
+    if sink:
+        sink(event)
+
+
 def with_retry(node, agent: str, output_key: str, schema: type[BaseModel]):
     """Graph-level safety net around one agent node.
 
@@ -193,6 +206,7 @@ def with_retry(node, agent: str, output_key: str, schema: type[BaseModel]):
 
     def wrapped(state: dict) -> dict:
         updates: dict = {"progress": [{"agent": agent, "status": "started", "ts": now_iso()}]}
+        _emit(updates["progress"][0])
         try:
             node_updates = node(state)
         except QuotaError:
@@ -205,9 +219,11 @@ def with_retry(node, agent: str, output_key: str, schema: type[BaseModel]):
             updates[output_key] = degraded
             updates["errors"] = [{"agent": agent, "type": "llm_error", "message": str(exc)}]
             updates["progress"].append({"agent": agent, "status": "failed", "ts": now_iso()})
+            _emit(updates["progress"][-1])
             return updates
         updates.update(node_updates)
         updates["progress"].append({"agent": agent, "status": "finished", "ts": now_iso()})
+        _emit(updates["progress"][-1])
         return updates
 
     return wrapped
