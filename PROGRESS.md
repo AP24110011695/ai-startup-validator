@@ -62,3 +62,14 @@
 **Assumptions:** the retry-with-adjusted-prompt lives in `call_llm` (per IMPLEMENTATION.md's "every LLM call" rule) while the wrapper handles degrade + progress — this supersedes the Phase 3 note that deferred `call_llm` retries to Phase 8 (Phase 7's forced-failure test needs them now, and they're mock-testable); wrapper emits a third status `failed` beyond the planned started/finished (UI maps it to a warning state); the validator node emits no progress events on success (instantaneous, not an agent row); semantic vagueness ("make money") is NOT caught by the length/letters heuristic — deferred to the Phase 10 edge-case work.
 
 **Known issues:** none.
+
+## Phase 8 — Backend API Layer
+**Status:** done (mock scope; ⏸️ paused at the sanctioned key request — real-mode live verification pending)
+
+**What was built:** `backend/main.py` — `POST /api/validate` (starts the graph in a background thread, returns `{run_id}` immediately), `GET /api/runs/{id}/events` (SSE: replays buffered events, then live `agent_status` per agent → `report` or `error` {code, message}), `GET /api/runs/{id}` (re-fetch), `POST /api/key` (hot-swap, no restart), in-memory `RUNS` store; report assembly with warnings (MOCK MODE badge, unverified research/market, failed agents). `backend/config.py` — real `set_api_key()` (in-memory swap + `.env` persistence) and `FAKE_QUOTA_ERROR` simulation switch. `backend/llm.py` — real Gemini call path (`_real_completion`: google-genai SDK, JSON response mode, 60s timeout, pydantic response schema), provider error mapping (429/RESOURCE_EXHAUSTED/quota/credits → `QuotaError`; timeouts → `LLMTimeoutError`; else `LLMError`); `QuotaError` is never retried and propagates through the retry wrapper to abort the run as a `quota_exceeded` SSE event (the UI's paste-a-new-key flow). `tests/test_api.py` — 8 tests. **Verified:** 31/31 pytest pass; live curl check: POST /api/validate → run_id, SSE shows 8 agent_status events then the full report, GET /api/runs/{id} → status done; simulated quota → structured `quota_exceeded`; `/api/key` swaps in memory and persists to `.env` (placeholder written, ready for the real key).
+
+**Assumptions/deviations:** search-provider (Tavily) quota errors do NOT abort the run — they fall back to LLM knowledge flagged `research_unverified` per IMPLEMENTATION.md's fallback rule; only LLM-key quota is fatal (documented conflict resolution). Real-mode path is written but not live-verified (no key yet — that is the sanctioned pause). `LLM_MODEL` is read dynamically so a key swap takes effect immediately.
+
+**Known issues:** none.
+
+**⏸️ PAUSED — waiting for the user to provide: `GEMINI_API_KEY` (required), `TAVILY_API_KEY` (recommended), `SERPAPI_API_KEY` (optional).**

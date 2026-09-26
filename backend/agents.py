@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pydantic import BaseModel
 
 from backend.config import USE_MOCK
-from backend.llm import call_llm
+from backend.llm import QuotaError, call_llm
 from backend.prompts import ANALYST_PROMPT, CRITIC_PROMPT, EVALUATOR_PROMPT, RESEARCHER_PROMPT, RUBRIC_WEIGHTS, VERDICT_BANDS
 from backend.schemas import Critique, FinalEvaluation, MarketAnalysis, ResearchFindings
 from backend.tools import web_search
@@ -195,6 +195,8 @@ def with_retry(node, agent: str, output_key: str, schema: type[BaseModel]):
         updates: dict = {"progress": [{"agent": agent, "status": "started", "ts": now_iso()}]}
         try:
             node_updates = node(state)
+        except QuotaError:
+            raise  # fatal for the run: the API layer turns it into the paste-a-new-key flow
         except Exception as exc:
             logger.exception("%s_node failed after all LLM retries; degrading", agent)
             degraded = schema().model_dump()

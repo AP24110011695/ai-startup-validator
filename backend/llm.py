@@ -1,15 +1,19 @@
-"""LLM access. USE_MOCK=true routes to canned per-agent responses; the real Gemini
-call (plus quota/error mapping) lands in Phase 8 behind the same signature.
+"""LLM access. USE_MOCK=true routes to canned per-agent responses; USE_MOCK=false
+calls Gemini in JSON response mode (live verification happens once the real key
+is provided — the sanctioned Phase 8 pause point).
 
 call_llm implements the error-handling rules: on any failure it retries up to
 MAX_LLM_RETRIES times with an adjusted prompt, then raises LLMError — the graph's
 node wrapper turns that into a degraded-but-valid output so the pipeline continues.
+Quota-class failures are never retried: they raise QuotaError, which aborts the run
+and surfaces the paste-a-new-key flow in the UI.
 """
 import json
 import logging
 
 from pydantic import BaseModel
 
+from backend import config
 from backend.config import USE_MOCK
 
 logger = logging.getLogger(__name__)
@@ -21,18 +25,30 @@ class LLMError(RuntimeError):
     """Raised when an agent's LLM call fails on the initial attempt and all retries."""
 
 
+class LLMTimeoutError(LLMError):
+    """The provider call timed out (retried like any other failure)."""
+
+
+class QuotaError(RuntimeError):
+    """API key quota/rate-limit/credits exhausted — fatal for the run; the UI shows
+    the paste-a-new-key prompt."""
+
+
 def call_llm(agent: str, system: str, user: str, schema: type[BaseModel]) -> BaseModel:
     """One agent turn: returns schema-validated output. Retries with an adjusted
-    prompt on failure; raises LLMError once all attempts are exhausted.
+    prompt on failure; raises QuotaError immediately (never retried) and LLMError
+    once all attempts are exhausted.
     """
+    if config.FAKE_QUOTA_ERROR:
+        raise QuotaError("SIMULATED quota exhaustion (FAKE_QUOTA_ERROR=1)")
     prompt = user
     last_error: Exception | None = None
     for attempt in range(1 + MAX_LLM_RETRIES):
         try:
             if USE_MOCK:
                 return schema.model_validate(_mock_response(agent, prompt))
-            raise NotImplementedError("real LLM calls are wired in Phase 8")
-        except NotImplementedError:
+            return schema.model_validate(_real_completion(agent, system, prompt, schema))
+        except QuotaError:
             raise
         except Exception as exc:
             last_error = exc
@@ -46,6 +62,52 @@ def call_llm(agent: str, system: str, user: str, schema: type[BaseModel]) -> Bas
 
 def _adjusted_prompt(user: str, schema: type[BaseModel]) -> str:
     return f"{user}\n\nIMPORTANT: Respond ONLY with valid JSON matching this schema: {json.dumps(schema.model_json_schema())}"
+
+
+def _real_completion(agent: str, system: str, user: str, schema: type[BaseModel]) -> dict:
+    """Real Gemini call in JSON response mode. Written in Phase 8; live-verified
+    once the real API key is provided."""
+    from google import genai
+    from google.genai import types
+
+    api_key = config.API_KEYS["GEMINI_API_KEY"]
+    if not api_key:
+        # Real mode without a key is quota-class: the UI prompts for the key.
+        raise QuotaError("GEMINI_API_KEY is not set — paste your API key to continue.")
+    client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=60_000))
+    try:
+        response = client.models.generate_content(
+            model=config.LLM_MODEL,
+            contents=user,
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type="application/json",
+                response_schema=schema,
+                temperature=0.4,
+            ),
+        )
+    except Exception as exc:
+        raise _map_provider_error(exc) from exc
+    if not response.text:
+        raise LLMError(f"{agent}: empty response from model")
+    return _parse_json(response.text)
+
+
+def _map_provider_error(exc: Exception) -> Exception:
+    text = str(exc)
+    lowered = text.lower()
+    if "429" in text or "resource_exhausted" in lowered or "exhausted" in lowered or "quota" in lowered or "insufficient" in lowered or "credit" in lowered:
+        return QuotaError(f"LLM API key limit reached: {text[:200]}")
+    if "timeout" in lowered or "timed out" in lowered or "deadline" in lowered:
+        return LLMTimeoutError(f"LLM timed out: {text[:200]}")
+    return LLMError(f"LLM call failed: {text[:200]}")
+
+
+def _parse_json(text: str) -> dict:
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1].removeprefix("json")
+    return json.loads(text)
 
 
 def _mock_response(agent: str, user: str) -> dict:
