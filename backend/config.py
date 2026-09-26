@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
 USE_MOCK: bool = os.getenv("USE_MOCK", "true").lower() == "true"
-LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-2.5-flash")
+LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-3.8-flash")
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 FAKE_QUOTA_ERROR: bool = os.getenv("FAKE_QUOTA_ERROR", "") == "1"
 

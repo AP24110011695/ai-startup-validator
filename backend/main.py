@@ -32,7 +32,7 @@ app = FastAPI(title="AI Startup Validator")
 
 RUNS: dict[str, dict] = {}
 STREAM_POLL_SECONDS = 0.2
-STREAM_MAX_SECONDS = 300
+STREAM_MAX_SECONDS = 600  # real runs with rate-limit backoffs can take a few minutes
 
 
 class ValidateRequest(BaseModel):

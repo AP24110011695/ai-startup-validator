@@ -10,6 +10,7 @@ and surfaces the paste-a-new-key flow in the UI.
 """
 import json
 import logging
+import time
 
 from pydantic import BaseModel
 
@@ -19,6 +20,8 @@ from backend.config import USE_MOCK
 logger = logging.getLogger(__name__)
 
 MAX_LLM_RETRIES = 2
+RETRY_BACKOFF_SECONDS = 0.5    # generic failures
+RETRY_BACKOFF_RATE_LIMIT = 15  # per-minute quota windows need real waiting
 
 
 class LLMError(RuntimeError):
@@ -29,6 +32,11 @@ class LLMTimeoutError(LLMError):
     """The provider call timed out (retried like any other failure)."""
 
 
+class RateLimitError(LLMError):
+    """Provider 429 / quota-class failure. Retried with long backoff; if it persists
+    across all attempts, call_llm converts it to QuotaError (paste-a-new-key flow)."""
+
+
 class QuotaError(RuntimeError):
     """API key quota/rate-limit/credits exhausted — fatal for the run; the UI shows
     the paste-a-new-key prompt."""
@@ -36,27 +44,33 @@ class QuotaError(RuntimeError):
 
 def call_llm(agent: str, system: str, user: str, schema: type[BaseModel]) -> BaseModel:
     """One agent turn: returns schema-validated output. Retries with an adjusted
-    prompt on failure; raises QuotaError immediately (never retried) and LLMError
-    once all attempts are exhausted.
+    prompt on failure (long backoff for rate limits); raises QuotaError for
+    permanent quota problems and LLMError once all attempts are exhausted.
     """
     if config.FAKE_QUOTA_ERROR:
         raise QuotaError("SIMULATED quota exhaustion (FAKE_QUOTA_ERROR=1)")
     prompt = user
     last_error: Exception | None = None
+    last_was_rate_limit = False
     for attempt in range(1 + MAX_LLM_RETRIES):
         try:
             if USE_MOCK:
                 return schema.model_validate(_mock_response(agent, prompt))
             return schema.model_validate(_real_completion(agent, system, prompt, schema))
         except QuotaError:
-            raise
+            raise  # permanent conditions: missing key / simulated exhaustion
         except Exception as exc:
             last_error = exc
+            last_was_rate_limit = isinstance(exc, RateLimitError)
             logger.warning(
                 "call_llm: attempt %d/%d for agent=%s failed: %s",
                 attempt + 1, 1 + MAX_LLM_RETRIES, agent, exc,
             )
+            if attempt < MAX_LLM_RETRIES:
+                time.sleep(RETRY_BACKOFF_RATE_LIMIT if last_was_rate_limit else RETRY_BACKOFF_SECONDS)
             prompt = _adjusted_prompt(user, schema)
+    if last_was_rate_limit:
+        raise QuotaError(f"{agent}: LLM rate limit persisted across all retries: {last_error}") from last_error
     raise LLMError(f"{agent}: LLM failed after {1 + MAX_LLM_RETRIES} attempts") from last_error
 
 
@@ -97,7 +111,7 @@ def _map_provider_error(exc: Exception) -> Exception:
     text = str(exc)
     lowered = text.lower()
     if "429" in text or "resource_exhausted" in lowered or "exhausted" in lowered or "quota" in lowered or "insufficient" in lowered or "credit" in lowered:
-        return QuotaError(f"LLM API key limit reached: {text[:200]}")
+        return RateLimitError(f"LLM API limit hit (will retry with backoff): {text[:200]}")
     if "timeout" in lowered or "timed out" in lowered or "deadline" in lowered:
         return LLMTimeoutError(f"LLM timed out: {text[:200]}")
     return LLMError(f"LLM call failed: {text[:200]}")
